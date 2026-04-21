@@ -62,7 +62,15 @@ PICAZHU understands the content of your images. Search by objects, scenes, mood,
 
 ## Screenshots
 
-*Coming soon*
+### Main Window
+Three-column layout: folder tree sidebar, adaptive thumbnail grid with AI badges, and inspector panel with captions, tags, and metadata.
+
+![Main Window](screenshots/main-window.png)
+
+### AI Analysis In Progress
+Neural-scan radar effect on the active thumbnail, "Queued" badges on waiting items, "AI" badges on completed items, and the sub-stage progress bar at the bottom.
+
+![AI Analysis](screenshots/ai-analysis.png)
 
 ## Requirements
 
