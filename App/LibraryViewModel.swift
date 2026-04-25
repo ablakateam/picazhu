@@ -457,38 +457,46 @@ final class LibraryViewModel {
         )
     }
 
-    func urlForSelectedItem() async -> URL? {
+    private func resolveSelectedItemWithScope() async -> (url: URL, rootURL: URL)? {
         guard let id = selection.first,
               let item = items.first(where: { $0.id == id }),
               let root = try? env.rootRepo.find(id: item.rootID) else { return nil }
         do {
             let resolved = try await env.bookmarks.resolve(root)
-            return resolved.url.appendingPathComponent(item.relativePath)
+            let fileURL = resolved.url.appendingPathComponent(item.relativePath)
+            return (fileURL, resolved.url)
         } catch {
             return nil
         }
     }
 
     func quickLookSelection() async {
-        guard let url = await urlForSelectedItem() else { return }
-        let scope = try? SecurityScope(url: url.deletingLastPathComponent())
-        _ = scope
-        QuickLookController.shared.show(urls: [url])
+        guard let result = await resolveSelectedItemWithScope() else { return }
+        _ = result.rootURL.startAccessingSecurityScopedResource()
+        QuickLookController.shared.show(urls: [result.url])
     }
 
     func revealSelection() async {
-        guard let url = await urlForSelectedItem() else { return }
-        FileActions.revealInFinder(url)
+        guard let result = await resolveSelectedItemWithScope() else { return }
+        let started = result.rootURL.startAccessingSecurityScopedResource()
+        FileActions.revealInFinder(result.url)
+        if started { result.rootURL.stopAccessingSecurityScopedResource() }
     }
 
     func openSelection() async {
-        guard let url = await urlForSelectedItem() else { return }
-        FileActions.open(url)
+        guard let result = await resolveSelectedItemWithScope() else { return }
+        let started = result.rootURL.startAccessingSecurityScopedResource()
+        FileActions.open(result.url)
+        if started {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                result.rootURL.stopAccessingSecurityScopedResource()
+            }
+        }
     }
 
     func copyPathSelection() async {
-        guard let url = await urlForSelectedItem() else { return }
-        FileActions.copyPath(url)
+        guard let result = await resolveSelectedItemWithScope() else { return }
+        FileActions.copyPath(result.url)
     }
 
     private func formattedSize(_ bytes: Int64) -> String {

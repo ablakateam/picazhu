@@ -37,7 +37,10 @@ public enum FileActions {
     }
 
     public static func open(_ url: URL) {
-        NSWorkspace.shared.open(url)
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        task.arguments = [url.path]
+        try? task.run()
     }
 
     public static func copyPath(_ url: URL) {

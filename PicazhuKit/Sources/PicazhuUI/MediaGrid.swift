@@ -301,6 +301,7 @@ public struct MediaGridView: View {
             .background(Color(nsColor: .textBackgroundColor))
             .focusable()
             .focused($gridFocused)
+            .focusEffectDisabled()
             .onKeyPress(.leftArrow) { moveSelection(by: -1, proxy: proxy); return .handled }
             .onKeyPress(.rightArrow) { moveSelection(by: 1, proxy: proxy); return .handled }
             .onKeyPress(.upArrow) { moveSelection(by: -columnsCount, proxy: proxy); return .handled }
