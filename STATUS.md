@@ -1,6 +1,6 @@
 # PICAZHU for macOS — Project Status
 
-_Last updated: 2026-04-24_
+_Last updated: 2026-04-25_
 
 ## TL;DR
 
@@ -182,6 +182,9 @@ curl http://localhost:11434/api/tags | jq .   # verify
 - ~~Keyboard navigation~~ — arrow keys + Enter in grid
 - ~~Global search~~ — Folder/All scope toggle
 - ~~Drag-and-drop~~ — drop folders from Finder to add
+- ~~About & Help~~ — About modal + Help guide with keyboard shortcuts, AI setup, tips
+- ~~Sandbox file open~~ — `/usr/bin/open` + security scope on all file actions
+- ~~Focus ring~~ — removed ugly blue border, keyboard nav preserved
 
 ### Distribution
 - Apple Developer account approved: **EBOXLAB LLC** (Team ID: 83LKDLKNX6)
