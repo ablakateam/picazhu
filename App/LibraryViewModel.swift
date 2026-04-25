@@ -26,6 +26,8 @@ final class LibraryViewModel {
     var recent: [Folder] = []
     var savedSearches: [SavedSearch] = []
     var searchText: String = ""
+    var searchGlobal: Bool = false
+    var filterState: FilterState = FilterState()
     var cellSize: CGFloat = DesignTokens.Grid.defaultCellSize
     var inspectorVisible: Bool = true
     var diagnosticsDisplay: DiagnosticsDisplay?
@@ -143,18 +145,36 @@ final class LibraryViewModel {
             return
         }
         do {
-            if !searchText.isEmpty {
-                let query = SearchQuery(text: searchText, folderScope: .folder(folderID))
-                var queryEmbedding: [Float]? = nil
-                do {
-                    let emb = try await env.aiProvider.embedText(searchText)
-                    if emb.dim > 0 { queryEmbedding = emb.vector }
-                } catch {
-                    queryEmbedding = nil
+            let hasSearch = !searchText.isEmpty
+            let hasFilters = filterState.isActive
+
+            if hasSearch || hasFilters {
+                let scope: FolderScope = searchGlobal ? .all : .folder(folderID)
+                let query = SearchQuery(
+                    text: searchText,
+                    kinds: filterState.kinds,
+                    dateRange: filterState.datePreset.dateRange,
+                    sizeRange: filterState.sizePreset.sizeRange,
+                    folderScope: scope
+                )
+                if hasSearch {
+                    var queryEmbedding: [Float]? = nil
+                    do {
+                        let emb = try await env.aiProvider.embedText(searchText)
+                        if emb.dim > 0 { queryEmbedding = emb.vector }
+                    } catch {
+                        queryEmbedding = nil
+                    }
+                    let engine = HybridSearchEngine(catalog: env.catalog, embeddings: env.embeddings)
+                    let hybrid = try engine.execute(query, queryEmbedding: queryEmbedding)
+                    items = hybrid.map(\.item)
+                } else {
+                    items = try env.searchEngine.execute(query)
                 }
-                let engine = HybridSearchEngine(catalog: env.catalog, embeddings: env.embeddings)
-                let hybrid = try engine.execute(query, queryEmbedding: queryEmbedding)
-                items = hybrid.map(\.item)
+
+                if filterState.aiOnly {
+                    items = items.filter { $0.aiState == .ready }
+                }
             } else {
                 items = try env.mediaRepo.items(in: folderID)
             }
@@ -176,6 +196,36 @@ final class LibraryViewModel {
             parentID = parent.parentID
         }
         return trail
+    }
+
+    func addDroppedFolder(_ url: URL) async {
+        debugLog.info("Folder dropped: \(url.lastPathComponent)")
+        do {
+            let newRootID = try await env.bookmarks.addRoot(from: url)
+            await reloadRoots()
+            await env.folderWatchManager.refresh()
+            isIndexing = true
+            indexingStatus = "Scanning \(url.lastPathComponent)…"
+            guard let root = try env.rootRepo.find(id: newRootID) else {
+                isIndexing = false
+                return
+            }
+            let progressActor = ScanProgress()
+            await env.coordinator.scanRootStreaming(root) { batchCount in
+                await progressActor.add(batchCount)
+            }
+            await reloadRoots()
+            if let target = bestLandingFolder(for: newRootID) {
+                await selectFolder(target)
+            }
+            indexingStatus = "Generating thumbnails…"
+            await runEnrichmentLoop(for: newRootID)
+            isIndexing = false
+            indexingStatus = ""
+        } catch {
+            isIndexing = false
+            debugLog.error("Drop folder failed: \(error)")
+        }
     }
 
     func addWatchedRoot() async {
@@ -688,6 +738,8 @@ final class LibraryViewModel {
                 self.aiRateTimer?.cancel()
                 self.aiCoordinator = nil
             }
+            await self.reloadCurrentFolder()
+            self.debugLog.info("AI run finished: \(self.aiProgress.completed)/\(self.aiProgress.total) done")
         }
     }
 

@@ -28,6 +28,7 @@ public struct ProgressTick: Sendable {
 public protocol AIThumbnailSource: Sendable {
     func thumbnailBytes(rootID: WatchedRootID, relativePath: String, modifiedAt: Date, size: Int64) async -> Data?
     func resolveFileURL(for itemID: MediaItemID) async -> URL?
+    func videoKeyframes(for itemID: MediaItemID, count: Int) async -> [Data]
 }
 
 public protocol AIOCRPerformer: Sendable {
@@ -104,17 +105,31 @@ public actor AIEnrichmentCoordinator {
 
         emit(stage: .idle, itemName: "Warming up model…")
 
+        let concurrency = 2
         while state == .running {
             if state == .paused {
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 continue
             }
-            if let next = try? await writer.nextAIJob() {
-                PicazhuLog.ai.info("Picked job \(next.jobID) for item \(next.itemID.rawValue)")
-                await process(jobID: next.jobID, itemID: next.itemID)
-            } else {
+
+            var batch: [(jobID: Int64, itemID: MediaItemID)] = []
+            for _ in 0..<concurrency {
+                if let next = try? await writer.nextAIJob() {
+                    batch.append(next)
+                }
+            }
+            guard !batch.isEmpty else {
                 PicazhuLog.ai.info("No more queued AI jobs, exiting run loop")
                 break
+            }
+
+            await withTaskGroup(of: Void.self) { group in
+                for job in batch {
+                    PicazhuLog.ai.info("Picked job \(job.jobID) for item \(job.itemID.rawValue)")
+                    group.addTask {
+                        await self.process(jobID: job.jobID, itemID: job.itemID)
+                    }
+                }
             }
         }
 
@@ -138,53 +153,115 @@ public actor AIEnrichmentCoordinator {
 
         PicazhuLog.ai.info("Processing \(item.filename) (kind=\(item.kind.rawValue))")
         var ocrText = ""
+        var detailed: AIDetailedDescription?
+
         if item.kind == .image {
+            // --- IMAGE PATH ---
             emit(stage: .ocr, itemName: item.filename)
             if let fileURL = await thumbnailSource.resolveFileURL(for: itemID) {
                 ocrText = (try? await ocr.recognize(fileURL: fileURL)) ?? ""
             }
-        }
 
-        emit(stage: .vlm, itemName: item.filename)
-        var detailed: AIDetailedDescription?
-        do {
-            PicazhuLog.ai.info("Fetching thumbnail bytes for \(item.filename)")
-            guard let thumbData = await thumbnailSource.thumbnailBytes(
-                rootID: item.rootID,
-                relativePath: item.relativePath,
-                modifiedAt: item.modifiedAt,
-                size: item.size
-            ) else {
-                PicazhuLog.ai.error("No thumbnail for \(item.filename)")
-                throw OllamaError.transport("no thumbnail")
+            emit(stage: .vlm, itemName: item.filename)
+            do {
+                guard let thumbData = await thumbnailSource.thumbnailBytes(
+                    rootID: item.rootID,
+                    relativePath: item.relativePath,
+                    modifiedAt: item.modifiedAt,
+                    size: item.size
+                ) else {
+                    throw OllamaError.transport("no thumbnail")
+                }
+                PicazhuLog.ai.info("VLM image \(item.filename, privacy: .public) (\(thumbData.count) bytes)")
+                if let ollama = provider as? OllamaVisionProvider {
+                    detailed = try await ollama.describeDetailed(imageData: thumbData)
+                } else {
+                    let input = AIImageInput(itemID: itemID, thumbnailData: thumbData, originalURL: nil)
+                    let desc = try await provider.describeImage(input)
+                    let tags = try await provider.tag(input)
+                    detailed = AIDetailedDescription(
+                        caption: desc.caption, tags: tags.tags, objects: tags.objects,
+                        scene: desc.scene ?? "", confidence: desc.confidence
+                    )
+                }
+            } catch {
+                let errMsg = String(describing: error)
+                try? await writer.completeAIJob(jobID, success: false, error: errMsg)
+                try? await writer.setItemAIState(itemID, .failed)
+                totalFailed += 1
+                lastError = errMsg
+                PicazhuLog.ai.error("VLM failed for \(item.filename, privacy: .public): \(errMsg, privacy: .public)")
+                emit(stage: .idle, itemName: "Error: \(errMsg.prefix(80))")
+                return
             }
-            PicazhuLog.ai.info("Calling VLM for \(item.filename, privacy: .public) (\(thumbData.count) bytes)")
+        } else {
+            // --- VIDEO PATH: multi-frame ---
+            emit(stage: .ocr, itemName: "\(item.filename) (extracting frames)")
+            let frames = await thumbnailSource.videoKeyframes(for: itemID, count: 5)
 
-            let input = AIImageInput(itemID: itemID, thumbnailData: thumbData, originalURL: nil)
-            if let ollama = provider as? OllamaVisionProvider {
-                detailed = try await ollama.describeDetailed(imageData: thumbData)
+            if frames.isEmpty {
+                if let thumbData = await thumbnailSource.thumbnailBytes(
+                    rootID: item.rootID, relativePath: item.relativePath,
+                    modifiedAt: item.modifiedAt, size: item.size
+                ) {
+                    emit(stage: .vlm, itemName: item.filename)
+                    do {
+                        if let ollama = provider as? OllamaVisionProvider {
+                            detailed = try await ollama.describeDetailed(imageData: thumbData)
+                        }
+                    } catch {
+                        PicazhuLog.ai.warning("Video poster fallback failed: \(error.localizedDescription)")
+                    }
+                }
             } else {
-                let desc = try await provider.describeImage(input)
-                let tags = try await provider.tag(input)
-                detailed = AIDetailedDescription(
-                    caption: desc.caption,
-                    tags: tags.tags,
-                    objects: tags.objects,
-                    scene: desc.scene ?? "",
-                    confidence: desc.confidence
-                )
+                PicazhuLog.ai.info("Video \(item.filename, privacy: .public): \(frames.count) keyframes extracted")
+
+                // OCR on each frame
+                var allOCR: [String] = []
+                for frame in frames {
+                    if let text = try? await ocr.recognize(imageData: frame), !text.isEmpty {
+                        allOCR.append(text)
+                    }
+                }
+                ocrText = Array(Set(allOCR)).joined(separator: "\n")
+
+                // VLM on each frame, merge results
+                var captions: [String] = []
+                var allTags: Set<String> = []
+                var allObjects: Set<String> = []
+                var scenes: Set<String> = []
+                var confidences: [Double] = []
+
+                for (i, frame) in frames.enumerated() {
+                    emit(stage: .vlm, itemName: "\(item.filename) (frame \(i+1)/\(frames.count))")
+                    do {
+                        if let ollama = provider as? OllamaVisionProvider {
+                            let d = try await ollama.describeDetailed(imageData: frame)
+                            if !d.caption.isEmpty { captions.append(d.caption) }
+                            d.tags.forEach { allTags.insert($0) }
+                            d.objects.forEach { allObjects.insert($0) }
+                            if !d.scene.isEmpty { scenes.insert(d.scene) }
+                            confidences.append(d.confidence)
+                        }
+                    } catch {
+                        PicazhuLog.ai.warning("Frame \(i+1) VLM failed: \(error.localizedDescription)")
+                    }
+                }
+
+                if !captions.isEmpty {
+                    let avgConf = confidences.isEmpty ? 0 : confidences.reduce(0, +) / Double(confidences.count)
+                    detailed = AIDetailedDescription(
+                        caption: captions.joined(separator: " / "),
+                        tags: Array(allTags).sorted(),
+                        objects: Array(allObjects).sorted(),
+                        scene: scenes.sorted().joined(separator: ", "),
+                        confidence: avgConf
+                    )
+                }
             }
-            PicazhuLog.ai.info("VLM returned caption for \(item.filename, privacy: .public)")
-        } catch {
-            let errMsg = String(describing: error)
-            try? await writer.completeAIJob(jobID, success: false, error: errMsg)
-            try? await writer.setItemAIState(itemID, .failed)
-            totalFailed += 1
-            lastError = errMsg
-            PicazhuLog.ai.error("VLM failed for \(item.filename, privacy: .public): \(errMsg, privacy: .public)")
-            emit(stage: .idle, itemName: "Error: \(errMsg.prefix(80))")
-            return
         }
+
+        PicazhuLog.ai.info("Analysis complete for \(item.filename, privacy: .public)")
 
         guard let detailed else {
             try? await writer.completeAIJob(jobID, success: false, error: "no description")

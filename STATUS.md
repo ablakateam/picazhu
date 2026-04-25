@@ -1,10 +1,10 @@
 # PICAZHU for macOS — Project Status
 
-_Last updated: 2026-04-17_
+_Last updated: 2026-04-24_
 
 ## TL;DR
 
-Phase 1 (browser) stable. **Phase 2 (AI) fully functional** — tested end-to-end with both local Ollama (`qwen3-vl:8b`) and Ollama Cloud (`qwen3-vl:235b-instruct`). In-app AI Settings with provider switching, live debug console, neural-scan visual effects on thumbnails during analysis, sub-stage progress bar, model auto-warmup on launch and auto-unload on quit. Apple Developer account applied for; `DISTRIBUTION.md` has the full signing/notarization playbook.
+Phase 1 (browser) + Phase 2 (AI) both production-ready. Tested with local Ollama (`qwen3-vl:8b`) and cloud (`qwen3-vl:235b-instruct`). Apple Developer account approved (EBOXLAB LLC), Developer ID certificate installed, first notarization submitted. Filter chips, video keyframe analysis, keyboard navigation, global search, concurrent enrichment, drag-and-drop folders all shipped.
 
 ## Architecture
 
@@ -164,23 +164,29 @@ curl http://localhost:11434/api/tags | jq .   # verify
 6. Scan cancellation not implemented
 7. App icon is the generic SwiftUI placeholder
 
-### Phase 2.1 (remaining)
-1. **Video keyframe handling** — videos get one poster-frame caption; 5-frame sampling + merge not built yet
-2. ~~AI Settings window~~ — DONE: in-app sheet with Local/Cloud toggle, API key, model dropdowns, Test Connection
-3. **Automated AI-path tests** — test targets exist but only the regression test has real content
-4. **OpenAI provider adapter** — protocol is ready, no implementation
-5. **Concurrent enrichment** — worker processes 1 job at a time; 2-way parallelism planned
-6. **Embedding ANN index** — in-memory cosine scan works to ~50k items; proper index deferred
-7. **Per-folder AI disable toggle in UI** — settings table supports it, no checkbox in sidebar
+### Remaining
+1. **Automated AI-path tests** — test targets exist but only the regression test has real content
+2. **OpenAI provider adapter** — protocol is ready, no implementation
+3. **Embedding ANN index** — in-memory cosine scan works to ~50k items; proper index deferred
+4. **Per-folder AI disable toggle in UI** — settings table supports it, no checkbox in sidebar
+5. `LazyVGrid` not virtualised — fine to ~10k items per folder
+6. Saved searches / pinned folders UI not wired
+7. Sparkle auto-update framework
 
-### Phase 1.5 (browser polish, updated)
-1. `LazyVGrid` not virtualised — fine to ~10k items per folder
-2. No sort/filter chip UI (engine supports it, UI doesn't surface it)
-3. Saved searches / pinned folders UI not wired
-4. ~~App icon~~ — DONE: custom icon from `pikazhu_logo.png`
+### Done (previously deferred)
+- ~~Video keyframe handling~~ — 5-frame extraction + per-frame VLM + merge
+- ~~AI Settings window~~ — Local/Cloud toggle, API key, model dropdowns, Test Connection
+- ~~Concurrent enrichment~~ — 2-way parallel via TaskGroup
+- ~~Sort/filter chip UI~~ — Images/Videos, Date, Size, AI Analyzed
+- ~~App icon~~ — custom icon from `pikazhu_logo.png`
+- ~~Keyboard navigation~~ — arrow keys + Enter in grid
+- ~~Global search~~ — Folder/All scope toggle
+- ~~Drag-and-drop~~ — drop folders from Finder to add
 
 ### Distribution
-- Apple Developer account applied for (pending approval)
+- Apple Developer account approved: **EBOXLAB LLC** (Team ID: 83LKDLKNX6)
+- Developer ID Application certificate installed
+- First notarization submitted (in progress)
 - Full signing/notarization/DMG guide in `DISTRIBUTION.md`
 
 ## Memory / references for future sessions

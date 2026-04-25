@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import PicazhuCore
 import PicazhuUI
 
@@ -108,6 +109,17 @@ struct RootView: View {
         .sheet(isPresented: $model.showAISettings) {
             AISettingsSheet(model: model)
         }
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            for provider in providers {
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url, url.hasDirectoryPath else { return }
+                    Task { @MainActor in
+                        await model.addDroppedFolder(url)
+                    }
+                }
+            }
+            return true
+        }
         .task { await model.bootstrap() }
     }
 
@@ -165,10 +177,14 @@ struct RootView: View {
             .padding(.horizontal, DesignTokens.Spacing.lg)
             .padding(.top, DesignTokens.Spacing.md)
 
-            SearchBar(text: $model.searchText, onSubmit: {
+            SearchBar(text: $model.searchText, global: $model.searchGlobal, onSubmit: {
                 Task { await model.reloadCurrentFolder() }
             })
             .padding(DesignTokens.Spacing.md)
+
+            FilterChipsBar(filter: $model.filterState) {
+                Task { await model.reloadCurrentFolder() }
+            }
 
             Divider()
 
@@ -378,6 +394,7 @@ struct BreadcrumbBar: View {
 
 struct SearchBar: View {
     @Binding var text: String
+    @Binding var global: Bool
     let onSubmit: () -> Void
 
     var body: some View {
@@ -388,6 +405,25 @@ struct SearchBar: View {
                 .textFieldStyle(.plain)
                 .onSubmit(onSubmit)
             if !text.isEmpty {
+                Button {
+                    global.toggle()
+                    onSubmit()
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: global ? "globe" : "folder")
+                        Text(global ? "All" : "Folder")
+                    }
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule().fill(global ? Color.accentColor.opacity(0.2) : Color(nsColor: .controlBackgroundColor))
+                    )
+                    .foregroundStyle(global ? Color.accentColor : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help(global ? "Searching all folders" : "Searching current folder")
+
                 Button {
                     text = ""
                     onSubmit()

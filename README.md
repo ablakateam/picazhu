@@ -39,13 +39,18 @@ PICAZHU understands the content of your images. Search by objects, scenes, mood,
 - **Beautiful grid** — adaptive thumbnail grid with adjustable cell size, smooth scrolling, and premium visual design.
 - **Three-column layout** — sidebar (folder tree + pinned + recent), content grid with breadcrumbs, and inspector panel.
 - **Quick Look** — press Space for native macOS Quick Look preview. Open, Reveal in Finder, Copy Path with keyboard shortcuts.
-- **Smart search** — full-text search over filenames, folders, AI captions, tags, and OCR text, scoped to the current folder.
+- **Smart search** — full-text search over filenames, folders, AI captions, tags, and OCR text. Toggle between current folder and global (all folders) scope.
+- **Filter chips** — filter by media type (Images/Videos), date range (Today/Week/Month/Year), file size, or AI-analyzed status. All filters combine with search.
+- **Keyboard navigation** — arrow keys to move selection in the grid, Enter to open, auto-scroll to keep selection visible.
+- **Drag-and-drop** — drop folders from Finder onto the app window to add them as watched roots.
 - **Live folder watching** — FSEvents-based monitoring picks up adds, deletes, renames, and moves without rescanning.
 - **Security-scoped bookmarks** — sandboxed app with persistent folder access that survives relaunches.
 
 ### AI Enrichment
 - **Per-folder opt-in** — right-click a folder to analyze it with AI. Nothing runs automatically. You control what gets processed.
 - **Dual provider support** — Local Ollama (fully private, your hardware) or Ollama Cloud (faster, larger models).
+- **Video keyframe analysis** — extracts 5 frames per video (10/30/50/70/90%), runs VLM + OCR on each, merges captions/tags/objects into one searchable result.
+- **Concurrent processing** — analyzes 2 items in parallel for faster throughput.
 - **Structured captioning** — each image gets a natural-language caption, 5-15 tags, detected objects, scene description, and confidence score.
 - **Apple Vision OCR** — text in photos (signs, labels, screens) is extracted using Apple's on-device Vision framework. Fast, accurate, always local.
 - **Hybrid search** — combines FTS5 full-text search with cosine-similarity semantic ranking over caption embeddings.
@@ -62,13 +67,18 @@ PICAZHU understands the content of your images. Search by objects, scenes, mood,
 
 ## Screenshots
 
-### Main Window
-Three-column layout: folder tree sidebar, adaptive thumbnail grid with AI badges, and inspector panel with captions, tags, and metadata.
+### PICAZHU in Action
+Three-column layout with folder tree, video thumbnails with AI badges, filter chips, and the inspector panel showing AI-generated captions and tags.
+
+![PICAZHU](screenshots/app-real.png)
+
+### UI Mockups
+
+**Main Window** — folder tree sidebar, adaptive thumbnail grid, inspector panel with metadata and AI analysis.
 
 ![Main Window](screenshots/main-window.png)
 
-### AI Analysis In Progress
-Neural-scan radar effect on the active thumbnail, "Queued" badges on waiting items, "AI" badges on completed items, and the sub-stage progress bar at the bottom.
+**AI Analysis In Progress** — neural-scan radar effect on the active thumbnail, "Queued" badges on waiting items, "AI" badges on completed items, sub-stage progress bar.
 
 ![AI Analysis](screenshots/ai-analysis.png)
 
@@ -202,6 +212,8 @@ Search: FTS5 BM25 (60%) + cosine similarity (40%)
 | Smaller Thumbnails | `⌘-` |
 | Larger Thumbnails | `⌘=` |
 | Diagnostics | `⌘⇧D` |
+| Navigate grid | `←` `→` `↑` `↓` |
+| Open selected | `Enter` |
 
 ## Debug Console
 
@@ -236,11 +248,16 @@ log stream --predicate 'subsystem == "com.picazhu.mac"' --level info
 - [x] AI Settings UI with Local/Cloud switching
 - [x] Neural-scan visual effects + progress bar
 - [x] Splash screen + app icon
-- [ ] Video multi-frame analysis (5 keyframes per video)
-- [ ] Sort/filter chips (by date, type, size, AI tags)
+- [x] Video 5-frame keyframe analysis with merged captions
+- [x] Sort/filter chips (Images/Videos, Date, Size, AI Analyzed)
+- [x] Keyboard navigation (arrow keys + Enter)
+- [x] Global search toggle (current folder / all folders)
+- [x] Concurrent AI enrichment (2-way parallel)
+- [x] Drag-and-drop folders from Finder
+- [x] Developer ID signing (EBOXLAB LLC)
+- [ ] Notarized DMG distribution
 - [ ] OpenAI provider adapter (GPT-4o Vision)
 - [ ] Saved searches UI
-- [ ] Developer ID signing + notarized DMG
 - [ ] Auto-update via Sparkle
 
 ## License

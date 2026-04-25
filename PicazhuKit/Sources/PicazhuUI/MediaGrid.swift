@@ -263,37 +263,75 @@ public struct MediaGridView: View {
         self.onOpen = onOpen
     }
 
+    @FocusState private var gridFocused: Bool
+
     public var body: some View {
-        ScrollView {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: cellSize), spacing: DesignTokens.Grid.gutter)],
-                spacing: DesignTokens.Grid.gutter
-            ) {
-                ForEach(items, id: \.id) { item in
-                    MediaCell(
-                        item: item,
-                        isSelected: selection.contains(item.id),
-                        isAnalyzing: !currentlyAnalyzingName.isEmpty && item.filename == currentlyAnalyzingName,
-                        cellSize: cellSize,
-                        thumbnail: thumbnailForItem(item)
-                    )
-                    .onTapGesture(count: 2) { onOpen(item) }
-                    .onTapGesture {
-                        if NSEvent.modifierFlags.contains(.command) {
-                            if selection.contains(item.id) {
-                                selection.remove(item.id)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: cellSize), spacing: DesignTokens.Grid.gutter)],
+                    spacing: DesignTokens.Grid.gutter
+                ) {
+                    ForEach(items, id: \.id) { item in
+                        MediaCell(
+                            item: item,
+                            isSelected: selection.contains(item.id),
+                            isAnalyzing: !currentlyAnalyzingName.isEmpty && currentlyAnalyzingName.hasPrefix(item.filename),
+                            cellSize: cellSize,
+                            thumbnail: thumbnailForItem(item)
+                        )
+                        .id(item.id)
+                        .onTapGesture(count: 2) { onOpen(item) }
+                        .onTapGesture {
+                            gridFocused = true
+                            if NSEvent.modifierFlags.contains(.command) {
+                                if selection.contains(item.id) {
+                                    selection.remove(item.id)
+                                } else {
+                                    selection.insert(item.id)
+                                }
                             } else {
-                                selection.insert(item.id)
+                                selection = [item.id]
                             }
-                        } else {
-                            selection = [item.id]
                         }
                     }
                 }
+                .padding(DesignTokens.Spacing.lg)
             }
-            .padding(DesignTokens.Spacing.lg)
+            .background(Color(nsColor: .textBackgroundColor))
+            .focusable()
+            .focused($gridFocused)
+            .onKeyPress(.leftArrow) { moveSelection(by: -1, proxy: proxy); return .handled }
+            .onKeyPress(.rightArrow) { moveSelection(by: 1, proxy: proxy); return .handled }
+            .onKeyPress(.upArrow) { moveSelection(by: -columnsCount, proxy: proxy); return .handled }
+            .onKeyPress(.downArrow) { moveSelection(by: columnsCount, proxy: proxy); return .handled }
+            .onKeyPress(.return) {
+                if let id = selection.first, let item = items.first(where: { $0.id == id }) {
+                    onOpen(item)
+                }
+                return .handled
+            }
         }
-        .background(Color(nsColor: .textBackgroundColor))
+    }
+
+    private var columnsCount: Int {
+        max(1, Int((NSScreen.main?.frame.width ?? 1200) / (cellSize + DesignTokens.Grid.gutter)))
+    }
+
+    private func moveSelection(by offset: Int, proxy: ScrollViewProxy) {
+        guard !items.isEmpty else { return }
+        let currentIndex: Int
+        if let sel = selection.first, let idx = items.firstIndex(where: { $0.id == sel }) {
+            currentIndex = idx
+        } else {
+            currentIndex = -1
+        }
+        let newIndex = max(0, min(items.count - 1, currentIndex + offset))
+        let newID = items[newIndex].id
+        selection = [newID]
+        withAnimation(.easeInOut(duration: 0.15)) {
+            proxy.scrollTo(newID, anchor: .center)
+        }
     }
 }
 

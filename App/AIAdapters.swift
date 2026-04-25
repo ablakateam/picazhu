@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import PicazhuCore
 import PicazhuData
 import PicazhuAI
@@ -59,6 +60,22 @@ struct ThumbnailSourceAdapter: AIThumbnailSource {
             return resolved.url.appendingPathComponent(item.relativePath)
         } catch {
             return nil
+        }
+    }
+
+    func videoKeyframes(for itemID: MediaItemID, count: Int) async -> [Data] {
+        guard let url = await resolveFileURL(for: itemID) else { return [] }
+        guard let item = try? mediaRepo.find(id: itemID),
+              let root = try? rootRepo.find(id: item.rootID) else { return [] }
+        do {
+            let resolved = try await bookmarks.resolve(root)
+            let scope = try SecurityScope(url: resolved.url)
+            _ = scope
+            let frames = try await VideoKeyframeExtractor.extractFrames(url: url, count: count)
+            return frames.map(\.imageData)
+        } catch {
+            PicazhuLog.ai.error("Keyframe extraction failed: \(error.localizedDescription)")
+            return []
         }
     }
 }
