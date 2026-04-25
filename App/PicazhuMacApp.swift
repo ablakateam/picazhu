@@ -81,8 +81,18 @@ struct PicazhuMacApp: App {
 
                 ClearLibraryMenuItem(model: model)
             }
-            CommandGroup(after: .appInfo) {
+            CommandGroup(replacing: .appInfo) {
+                Button("About PICAZHU") {
+                    if let m = model { m.showAbout = true }
+                }
+                Divider()
                 DiagnosticsMenuItem(model: model)
+            }
+            CommandGroup(replacing: .help) {
+                Button("PICAZHU Help") {
+                    if let m = model { m.showHelp = true }
+                }
+                .keyboardShortcut("?", modifiers: .command)
             }
             CommandMenu("Go") {
                 Button("Quick Look") {

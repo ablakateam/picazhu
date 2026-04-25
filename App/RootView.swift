@@ -109,6 +109,12 @@ struct RootView: View {
         .sheet(isPresented: $model.showAISettings) {
             AISettingsSheet(model: model)
         }
+        .sheet(isPresented: $model.showAbout) {
+            AboutView()
+        }
+        .sheet(isPresented: $model.showHelp) {
+            HelpView()
+        }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             for provider in providers {
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in

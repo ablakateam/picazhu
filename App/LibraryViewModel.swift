@@ -40,6 +40,8 @@ final class LibraryViewModel {
     var aiProgress: AIProgressSnapshot = AIProgressSnapshot()
     var ollamaStatus: OllamaStatus = OllamaStatus()
     var showAISettings: Bool = false
+    var showAbout: Bool = false
+    var showHelp: Bool = false
     let debugLog = DebugLog.shared
     private var aiCoordinator: AIEnrichmentCoordinator?
     private var aiConsumerTask: Task<Void, Never>?
